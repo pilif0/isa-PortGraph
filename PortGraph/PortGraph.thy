@@ -1,7 +1,7 @@
 theory PortGraph
   imports
     Port
-    Util
+    PortGraph_Util
 begin
 
 section\<open>Port Graphs\<close>

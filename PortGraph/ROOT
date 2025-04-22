@@ -3,7 +3,7 @@ session "PortGraph" = "HOL" +
   sessions
     "HOL-Library"
   theories
-    Util
+    PortGraph_Util
     Util_Mapping
     Port
     PortGraph

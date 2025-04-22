@@ -1,4 +1,4 @@
-theory Util
+theory PortGraph_Util
   imports Main
 begin
 
