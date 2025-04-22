@@ -1,0 +1,10 @@
+session "PortGraph_Export" = "PortGraph" +
+  options [timeout = 600]
+  sessions
+    "Nano_JSON"
+    "Show"
+  theories
+    ELKJson
+    PetriNetDot
+  document_files
+    "root.tex"

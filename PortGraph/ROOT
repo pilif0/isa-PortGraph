@@ -1,0 +1,21 @@
+session "PortGraph" = "HOL" +
+  options [timeout = 600]
+  sessions
+    "HOL-Library"
+  theories
+    Util
+    Util_Mapping
+    Port
+    PortGraph
+    PortGraphTrans
+    Juxtapose
+    Sequence
+    JuxSeqCommute
+    EndPortGraph
+    ForkPortGraph
+    IdentityPortGraph
+    NodePortGraph
+    SwapPortGraph
+    Equivalences
+  document_files
+    "root.tex"

@@ -1,0 +1,6 @@
+# Document output directory
+output
+
+# Isabelle/jEdit cache files
+*.thy~
+ROOT~
