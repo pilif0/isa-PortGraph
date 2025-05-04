@@ -542,27 +542,74 @@ proof (rule pgEquiv_permute)
       \<comment> \<open>Edges made from these mappings are the edges of the corresponding identity port graph\<close>
     proof safe
       fix e :: "('s, 'a, 'p) edge"
-      assume e: "e \<in> set (edgesFromPortMapping (listPorts 0 Out (bs @ as)) ?mappingL' ?mappingR')"
+      assume "e \<in> set (edgesFromPortMapping (listPorts 0 Out (bs @ as)) ?mappingL' ?mappingR')"
+      then obtain i j k xs ys
+       where xs: "Mapping.lookup ?mappingL' ((listPorts 0 Out (bs @ as)) ! i) = Some xs"
+         and ys: "Mapping.lookup ?mappingR' ((listPorts 0 In (bs @ as)) ! i) = Some ys"
+         and  i: "i < length bs + length as"
+         and  e: "e = Edge (xs ! j) (ys ! k)"
+         and  j: "j < length xs"
+         and  k: "k < length ys"
+        by (clarsimp elim!: edgesFromPortMapping_in_set_nthE)
 
-      show "e \<in> set (pg_edges (idPortGraph (as @ bs)))"
-        using e
-        apply -
-        apply (erule edgesFromPortMapping_in_set_nthE)
-        apply (simp add: comp_def)
-        apply (drule map_of_SomeD)+
-        apply (simp del: set_upt)
-        apply (subst (asm) (1 2) set_map[symmetric])
-        apply (subst (asm) (1 2) in_set_conv_nth)
-        apply (case_tac "length bs \<le> i" ; clarsimp del: pair_imageI intro!: pair_imageI simp add: in_set_zip)
-         apply (rule_tac x = "i - length bs" in exI)
-         apply (simp add: comp_def)
-         apply (intro conjI)
-           apply (subst nth_zip ; simp)
-          apply (subst nth_zip ; simp)
-         apply simp
-        apply (rule_tac x = "i + length as" in exI)
-        apply (simp add: comp_def)
-        done
+      then show "e \<in> set (pg_edges (idPortGraph (as @ bs)))"
+      proof (cases "length bs \<le> i")
+        case True
+        let ?n = "i - length bs"
+
+        have n: "?n < length (zip [0..<length as + length bs] (as @ bs))"
+          using i by simp
+        moreover have
+          " map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port In x xa))
+              (zip [0..<length as + length bs] (as @ bs))
+            ! ?n
+          = xs ! j"
+          using True xs i j by (fastforce dest: map_of_SomeD)
+        moreover have
+          " map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port Out x xa))
+              (zip [0..<length as + length bs] (as @ bs))
+            ! ?n
+          = ys ! k"
+          using True ys i k by (fastforce dest: map_of_SomeD)
+        ultimately have
+          " Edge (xs ! j) (ys ! k)
+          \<in> (\<lambda>x. case x of (x, xa) \<Rightarrow> Edge x xa) `
+              set (zip (map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port In x xa))
+                            (zip [0..<length as + length bs] (as @ bs)))
+                       (map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port Out x xa))
+                            (zip [0..<length as + length bs] (as @ bs))))"
+          by (fastforce simp only: in_set_zip length_map prod.sel)
+        then show ?thesis
+          using e by (simp add: comp_def)
+      next
+        case False
+        let ?n = "i + length as"
+
+        have n: "?n < length (zip [0..<length as + length bs] (as @ bs))"
+          using False i by simp
+        moreover have
+          " map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port In x xa))
+              (zip [0..<length as + length bs] (as @ bs))
+            ! ?n
+          = xs ! j"
+          using False xs i j by (fastforce dest: map_of_SomeD)
+        moreover have
+          " map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port Out x xa))
+              (zip [0..<length as + length bs] (as @ bs))
+            ! ?n
+          = ys ! k"
+          using False ys i k by (fastforce dest: map_of_SomeD)
+        ultimately have
+          " Edge (xs ! j) (ys ! k)
+          \<in> (\<lambda>x. case x of (x, xa) \<Rightarrow> Edge x xa) `
+              set (zip (map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port In x xa))
+                            (zip [0..<length as + length bs] (as @ bs)))
+                       (map (\<lambda>x. OpenPort (case x of (x, xa) \<Rightarrow> Port Out x xa))
+                            (zip [0..<length as + length bs] (as @ bs))))"
+          by (fastforce simp only: in_set_zip length_map prod.sel)
+        then show ?thesis
+          using e by (simp add: comp_def)
+      qed
     next
       fix e :: "('s, 'a, 'p) edge"
       assume "e \<in> set (pg_edges (idPortGraph (as @ bs)))"
