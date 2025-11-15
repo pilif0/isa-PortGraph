@@ -5,16 +5,16 @@ begin
 section\<open>Fork Port Graph\<close>
 
 text\<open>Fork port graph has no nodes and one input port that connects to two output ports\<close>
-fun forkPortGraph :: "'a \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'l) port_graph"
-  where "forkPortGraph r =
+fun forkPortGraph :: "'a \<Rightarrow> 'el \<Rightarrow> 'el \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
+  where "forkPortGraph r l1 l2 =
   PGraph
       []
-      [ Edge (OpenPort (Port In 0 r)) (OpenPort (Port Out 0 r))
-      , Edge (OpenPort (Port In 0 r)) (OpenPort (Port Out 1 r))]
+      [ Edge (OpenPort (Port In 0 r)) (OpenPort (Port Out 0 r)) l1
+      , Edge (OpenPort (Port In 0 r)) (OpenPort (Port Out 1 r)) l2]
       [Port In 0 r, Port Out 0 r, Port Out 1 r]"
 
 lemma port_graph_flow_forkPortGraph:
-  "port_graph_flow (forkPortGraph a)" (is "port_graph_flow ?G")
+  "port_graph_flow (forkPortGraph a l1 l2)" (is "port_graph_flow ?G")
 proof unfold_locales
   fix e
   assume e_in: "e \<in> set (pg_edges ?G)"
@@ -51,6 +51,14 @@ next
   then show "port.label p = port.label q"
     by simp
 next
+  fix e f
+  assume "e \<in> set (pg_edges ?G)"
+     and "f \<in> set (pg_edges ?G)"
+     and "edge_from e = edge_from f"
+     and "edge_to e = edge_to f"
+  then show "edge_label e = edge_label f"
+    by fastforce
+next
   show "distinct (pg_nodes ?G)"
     by simp
   show "distinct (pg_edges ?G)"
@@ -85,7 +93,7 @@ qed
 
 text\<open>Fork port graph is invariant under qualification\<close>
 lemma qualifyPortGraph_forkPortGraph [simp]:
-  "qualifyPortGraph x (forkPortGraph a) = forkPortGraph a"
+  "qualifyPortGraph x (forkPortGraph a l1 l2) = forkPortGraph a l1 l2"
   by (fastforce elim: in_set_zipE simp add: qualifyPortGraph_def)
 
 end

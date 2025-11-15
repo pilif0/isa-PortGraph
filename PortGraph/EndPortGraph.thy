@@ -5,7 +5,7 @@ begin
 section\<open>End Port Graph\<close>
 
 text\<open>End port graph has no nodes, edges or output ports, but it does have input ports\<close>
-fun endPortGraph :: "'a list \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'l) port_graph"
+fun endPortGraph :: "'a list \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   where "endPortGraph a = PGraph [] [] (listPorts 0 In a)"
 
 lemma port_graph_flow_endPortGraph:
@@ -44,6 +44,14 @@ next
      and "port.side p = port.side q"
      and "port.index p = port.index q"
   then show "port.label p = port.label q"
+    by simp
+next
+  fix e f
+  assume "e \<in> set (pg_edges ?G)"
+     and "f \<in> set (pg_edges ?G)"
+     and "edge_from e = edge_from f"
+     and "edge_to e = edge_to f"
+  then show "edge_label e = edge_label f"
     by simp
 next
   show "distinct (pg_nodes ?G)"

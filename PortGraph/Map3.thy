@@ -98,4 +98,17 @@ next
   qed
 qed
 
+lemma in_set_map3E:
+  assumes "a \<in> set (map3 f xs ys zs)"
+  obtains x y z i
+  where "a = f x y z" and "xs ! i = x" and "ys ! i = y" and "zs ! i = z" and "i < length xs" and "i < length ys" and "i < length zs"
+proof -
+  have "a \<in> (\<lambda>x. case x of (x, y, z) \<Rightarrow> f x y z) ` set (zip xs (zip ys zs))"
+    using assms by simp
+  then obtain x y z where "a = f x y z" and "(x, y, z) \<in> set (zip xs (zip ys zs))"
+    by force
+  then show thesis
+    using that by (fastforce simp add: in_set_zip)
+qed
+
 end

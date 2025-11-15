@@ -5,22 +5,23 @@ begin
 section\<open>Identity Port Graph\<close>
 
 text\<open>Identity port graph has no nodes, it only connects input ports directly to output ports\<close>
-fun idPortGraph :: "'a list \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'l) port_graph"
+fun idPortGraph :: "('a \<times> 'el) list \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   where "idPortGraph as =
   PGraph
     []
-    (map2 Edge (map OpenPort (listPorts 0 In as))
-               (map OpenPort (listPorts 0 Out as)))
-    (listPorts 0 In as @ listPorts 0 Out as)"
+    (map3 Edge (map OpenPort (listPorts 0 In (map fst as)))
+               (map OpenPort (listPorts 0 Out (map fst as)))
+               (map snd as))
+    (listPorts 0 In (map fst as) @ listPorts 0 Out (map fst as))"
 
 lemma port_graph_flow_idPortGraph:
-  "port_graph_flow (idPortGraph a)" (is "port_graph_flow ?G")
+  "port_graph_flow (idPortGraph as)" (is "port_graph_flow ?G")
 proof unfold_locales
   fix e
   assume "e \<in> set (pg_edges ?G)"
   then show "edge_from e \<in> set (pgraphPlaces ?G)"
         and "edge_to e \<in> set (pgraphPlaces ?G)"
-    by (fastforce elim: in_set_zipE)+
+    by (fastforce elim!: in_set_zipE)+
 next
   fix m n
   assume "m \<in> set (pg_nodes ?G)"
@@ -51,10 +52,18 @@ next
   then show "port.label p = port.label q"
     by simp
 next
+  fix e f
+  assume "e \<in> set (pg_edges ?G)"
+     and "f \<in> set (pg_edges ?G)"
+     and "edge_from e = edge_from f"
+     and "edge_to e = edge_to f"
+  then show "edge_label e = edge_label f"
+    by (clarsimp simp add: in_set_zip)
+next
   show "distinct (pg_nodes ?G)"
     by simp
   show "distinct (pg_edges ?G)"
-    by (fastforce simp add: comp_def distinct_map simp del: listPorts.simps intro!: distinct_zipI1)
+    by (fastforce simp add: comp_def distinct_map map3_def simp del: listPorts.simps intro!: distinct_zipI1)
   show "distinct (pg_ports ?G)"
     by (simp del: listPorts.simps)
 next
@@ -85,7 +94,7 @@ qed
 
 text\<open>Identity port graph is invariant under qualification\<close>
 lemma qualifyPortGraph_idPortGraph [simp]:
-  "qualifyPortGraph x (idPortGraph a) = idPortGraph a"
-  by (fastforce elim: in_set_zipE simp add: qualifyPortGraph_def)
+  "qualifyPortGraph x (idPortGraph as) = idPortGraph as"
+  by (fastforce elim: in_set_zipE simp add: qualifyPortGraph_def map3_def)
 
 end
