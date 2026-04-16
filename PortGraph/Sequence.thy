@@ -1320,7 +1320,7 @@ proof -
           by (metis (no_types, lifting) place.disc(1) shiftOpenInEdge_simps(1) shiftOpenPlace_ground)
         ultimately show ?thesis
           using R y.edge_from_pg pgraphPlaces_seqPortGraphs
-          by (metis (no_types, lifting) Un_iff filter_set member_filter place.disc(1) set_append)
+          by (metis (no_types, lifting) Un_iff set_filter mem_Collect_eq place.disc(1) set_append)
       next
         case (OpenPort p)
 
@@ -1378,14 +1378,14 @@ proof -
         case (GroundPort qp)
         then show ?thesis
           using L x.edge_to_pg pgraphPlaces_seqPortGraphs
-          by (metis (no_types, lifting) Un_iff filter_set member_filter place.disc(1) set_append)
+          by (metis (no_types, lifting) Un_iff set_filter mem_Collect_eq place.disc(1) set_append)
       next
         case (OpenPort p)
         moreover have "place_side (edge_to e) \<noteq> Out"
           using L OpenPort by (simp add: toOpenOut_def)
         ultimately show ?thesis
           using L x.edge_to_pg pgraphPlaces_seqPortGraphs
-          by (metis (mono_tags, lifting) Un_iff filter_set member_filter place.disc(4) set_append)
+          by (metis (mono_tags, lifting) Un_iff set_filter mem_Collect_eq place.disc(4) set_append)
       qed
     next
       case (R e')
@@ -1397,7 +1397,7 @@ proof -
           by (metis (no_types, lifting) place.disc(1) shiftOpenInEdge_simps(2) shiftOpenPlace_ground)
         ultimately show ?thesis
           using R y.edge_to_pg pgraphPlaces_seqPortGraphs
-          by (metis (no_types, lifting) Un_iff filter_set member_filter place.disc(1) set_append)
+          by (metis (no_types, lifting) Un_iff set_filter mem_Collect_eq place.disc(1) set_append)
       next
         case (OpenPort p)
 
@@ -1625,7 +1625,7 @@ proof -
         have "set (seqInterfaceEdges x y) \<inter> set (filter (\<lambda>x. \<not> toOpenOut x) (pg_edges x)) = {}"
           unfolding disjoint_iff_not_equal toOpenOut_def
           using assms(3) y.edge_to_pg y.edge_to_open x.edge_to_pg
-          by (smt (verit, best) filter_set member_filter place_in_pg_disjoint seqInterfaceEdges_setD)
+          by (smt (verit, best) set_filter mem_Collect_eq place_in_pg_disjoint seqInterfaceEdges_setD)
         moreover have
           " set (seqInterfaceEdges x y)
           \<inter> set (map (shiftOpenInEdge
@@ -1635,7 +1635,7 @@ proof -
            = {}"
           unfolding disjoint_iff_not_equal fromOpenIn_def
           using assms(3) x.edge_from_open x.edge_from_pg y.edge_from_pg
-          by (smt (verit) filter_set image_iff image_set member_filter not_place_open place_in_pg_disjoint seqInterfaceEdges_setD
+          by (smt (verit) image_iff image_set set_filter mem_Collect_eq not_place_open place_in_pg_disjoint seqInterfaceEdges_setD
               shiftOpenInEdge_simps(1) shiftOpenPlace_ground(2) shiftOpenPlace_open(1) shiftOpenPlace_side)
         ultimately show ?thesis
           unfolding set_append Int_Un_distrib Un_empty by (rule conjI)
@@ -2197,7 +2197,7 @@ proof (rule pgEquivI_ex)
           moreover have "\<not> fromOpenIn (renameEdge ?f (Edge (edge_from a') (edge_to b)))"
             using R(2) by (simp add: fromOpenIn_def)
           ultimately show ?thesis
-            by (smt (verit) image_eqI filter_set member_filter)
+            by (smt (verit) image_eqI set_filter mem_Collect_eq)
         qed
       qed
       moreover have "renameEdge ?f e \<in> set (seqInterfaceEdges x' (seqPortGraphs y' z'))"
@@ -2360,7 +2360,7 @@ proof (rule pgEquivI_ex)
           moreover have "\<not> toOpenOut (renameEdge ?g e)"
             using L(2) abp(3) by (simp add: toOpenOut_def)
           ultimately have "e \<in> renameEdge ?f ` set (filter (\<lambda>x. \<not> toOpenOut x) (seqInterfaceEdges x y))"
-            by (smt (verit) image_eqI filter_set member_filter)
+            by (smt (verit) image_eqI set_filter mem_Collect_eq)
           then show ?thesis by blast
         next
           case (R b')
@@ -2689,7 +2689,7 @@ proof (rule pgEquivI_ex)
           moreover have "\<not> fromOpenIn ?witness"
             using R(2) by (simp add: fromOpenIn_def)
           ultimately show ?thesis
-            by (smt (verit) image_eqI filter_set member_filter)
+            by (smt (verit) image_eqI set_filter mem_Collect_eq)
         qed
       qed
       moreover have "e \<in> renameEdge ?g ` set (seqInterfaceEdges x' (seqPortGraphs y' z'))"
@@ -2742,7 +2742,7 @@ proof (rule pgEquivI_ex)
             using abp(7) by simp
         qed
         ultimately show ?thesis
-          by (smt (verit) image_eqI filter_set member_filter)
+          by (smt (verit) image_eqI set_filter mem_Collect_eq)
       qed
       moreover have
         " renameEdge ?g e \<in> set (seqInterfaceEdges (seqPortGraphs x y) z)
@@ -2843,7 +2843,7 @@ proof (rule pgEquivI_ex)
           moreover have "\<not> toOpenOut (renameEdge ?g e)"
             using L(2) abp(3) by (simp add: toOpenOut_def)
           ultimately have "renameEdge ?g e \<in> set (filter (\<lambda>x. \<not> toOpenOut x) (seqInterfaceEdges x y))"
-            by (smt (verit) image_eqI filter_set member_filter)
+            by (smt (verit) image_eqI set_filter mem_Collect_eq)
           then show ?thesis by blast
         next
           case (R b')

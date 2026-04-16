@@ -257,7 +257,7 @@ proof -
     moreover have "node_name b = p"
       using 2 by (metis (mono_tags, lifting) filter_eq_ConsD)
     moreover have "b \<in> set (pg_nodes G)"
-      using 2 by (metis filter_set insert_iff list.set(2) member_filter)
+      using 2 by (metis filter_is_subset list.set_intros(1,2) subset_eq)
     moreover have "a \<noteq> b"
       by (metis 2 distinct_filter distinct_length_2_or_more nodes_distinct)
     ultimately show ?thesis
