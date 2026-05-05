@@ -5,14 +5,16 @@ begin
 section\<open>Node Port Graph\<close>
 
 text\<open>Node port graph has one node, connecting its ports to corresponding overall ports\<close>
-fun nodePortGraph :: "'p list \<Rightarrow> 'l \<Rightarrow> 'a list \<Rightarrow> 'a list  \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'l) port_graph"
+fun nodePortGraph :: "'p list \<Rightarrow> 'nl \<Rightarrow> ('a \<times> 'el) list \<Rightarrow> ('a \<times> 'el) list  \<Rightarrow> ('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   where "nodePortGraph n l ins outs = PGraph
-    [Node n l (listPorts 0 In ins @ listPorts 0 Out outs)]
-    (map2 Edge (map OpenPort (listPorts 0 In ins))
-               (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In ins)) @
-     map2 Edge (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out outs))
-               (map OpenPort (listPorts 0 Out outs)))
-    (listPorts 0 In ins @ listPorts 0 Out outs)"
+    [Node n l (listPorts 0 In (map fst ins) @ listPorts 0 Out (map fst outs))]
+    (map3 Edge (map OpenPort (listPorts 0 In (map fst ins)))
+               (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In (map fst ins)))
+               (map snd ins) @
+     map3 Edge (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out (map fst outs)))
+               (map OpenPort (listPorts 0 Out (map fst outs)))
+               (map snd outs))
+    (listPorts 0 In (map fst ins) @ listPorts 0 Out (map fst outs))"
 
 lemma map2_append: (* TODO general theorem *)
   assumes "length xs = length ys"
@@ -57,29 +59,39 @@ next
   then show "port.label p = port.label q"
     by (fastforce simp add: in_set_zip)
 next
+  fix e f
+  assume "e \<in> set (pg_edges ?G)"
+     and "f \<in> set (pg_edges ?G)"
+     and "edge_from e = edge_from f"
+     and "edge_to e = edge_to f"
+  then show "edge_label e = edge_label f"
+    by (fastforce simp add: in_set_zip)
+next
   show "distinct (pg_nodes ?G)"
     by simp
   show "distinct (pg_edges ?G)"
   proof -
-    have "distinct (zip
-      (map OpenPort (listPorts 0 In ins))
-      (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In ins)))"
+    have"distinct
+      (zip (map OpenPort (listPorts 0 In (map fst ins)))
+        (zip (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In (map fst ins)))
+          (map snd ins)))"
       by (meson distinct_listPorts distinct_map distinct_zipI1 inj_on_OpenPort)
-    moreover have "distinct (zip
-      (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out outs))
-      (map OpenPort (listPorts 0 Out outs)))"
-      by (meson distinct_listPorts distinct_map distinct_zipI2 inj_on_OpenPort)
+    moreover have "distinct
+      (zip (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out (map fst outs)))
+        (zip (map OpenPort (listPorts 0 Out (map fst outs)))
+          (map snd outs)))"
+      by (meson distinct_listPorts distinct_map distinct_zipI2 distinct_zipI1 inj_on_OpenPort)
     moreover have
-      " set (zip
-          (map OpenPort (listPorts 0 In ins))
-          (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In ins))) \<inter>
-        set (zip
-          (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out outs))
-          (map OpenPort (listPorts 0 Out outs)))
+      " set (zip (map OpenPort (listPorts 0 In (map fst ins)))
+              (zip (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 In (map fst ins)))
+                (map snd ins))) \<inter>
+        set (zip (map (\<lambda>p. GroundPort (QPort p n)) (listPorts 0 Out (map fst outs)))
+              (zip (map OpenPort (listPorts 0 Out (map fst outs)))
+                (map snd outs)))
       = {}"
       by safe (fastforce elim: in_set_zipE)
     ultimately show ?thesis
-      by (fastforce simp add: distinct_map)
+      by (fastforce simp add: distinct_map map3_def)
   qed
   show "distinct (pg_ports ?G)"
     by (simp del: listPorts.simps)

@@ -12,7 +12,7 @@ text\<open>
 subsection\<open>Node Flow\<close>
 
 text\<open>Node flow of a port graph relates two nodes if the first has an edge going to the second\<close>
-inductive node_flow :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> bool"
+inductive node_flow :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> bool"
   where
   edge: "\<lbrakk>x \<in> set (pg_nodes G); y \<in> set (pg_nodes G);
       e \<in> set (pg_edges G); edge_from e \<in> set (nodePlaces x); edge_to e \<in> set (nodePlaces y)\<rbrakk>
@@ -158,7 +158,7 @@ qed
 subsection\<open>Node Removal\<close>
 
 text\<open>Remove a node from a port graph, including any edges adjacent on its places\<close>
-definition removeNode :: "('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph"
+definition removeNode :: "('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph"
   where "removeNode n G =
   PGraph
     (filter ((\<noteq>) n) (pg_nodes G))
@@ -209,6 +209,11 @@ proof -
         and "port.index p = port.index q"
       for m p q
       using x.node_ports_label_eq that by (simp add: removeNode_def) blast
+    show "edge_label e = edge_label f"
+      if "e \<in> set (pg_edges (removeNode n x))" and "f \<in> set (pg_edges (removeNode n x))"
+        and "edge_from e = edge_from f" and "edge_to e = edge_to f"
+      for e f
+      using x.edges_label_eq that by (metis disconnectFromPlaces_in_setE removeNode_simps(2))
     show "distinct (pg_nodes (removeNode n x))"
       using x.nodes_distinct by (simp add: removeNode_def)
     show "distinct (pg_edges (removeNode n x))"
@@ -253,7 +258,7 @@ text\<open>
   Given a port graph, a node is enabled if and only if it is in that port graph and it has no
   incoming edges from other nodes of that port graph.
 \<close>
-definition nodeEnabled :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> bool"
+definition nodeEnabled :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> bool"
   where "nodeEnabled G n =
   ( n \<in> set (pg_nodes G) \<and>
     (\<forall>e. e \<in> set (pg_edges G) \<and> place_ground (edge_from e) \<longrightarrow> edge_to e \<notin> set (nodePlaces n)))"
@@ -271,7 +276,7 @@ text\<open>
   There exists a transition between two port graphs annotated by a node if the second port graph is
   the result of removing that node from the first
 \<close>
-inductive pgTrans :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> bool"
+inductive pgTrans :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> bool"
   where "\<lbrakk>nodeEnabled G n; G' = removeNode n G\<rbrakk> \<Longrightarrow> pgTrans G n G'"
 
 text\<open>No port graph without nodes can transition\<close>
@@ -295,7 +300,7 @@ text\<open>
   other
 \<close>
 lemma (* TODO this would be a better form of the theorem below *)
-    fixes X Y X' :: "('a, 'b, 'c, 'd) port_graph"
+    fixes X Y X' :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "X \<approx> Y"
       and "pgEquiv_witness f g X Y"
       and "port_graph X"
@@ -313,7 +318,7 @@ proof -
     using assms by (elim pgEquivE ; blast)
   note XY = this
 
-  obtain Y' :: "('a, 'b, 'c, 'd) port_graph"
+  obtain Y' :: "('s, 'a, 'p, 'nl, 'el) port_graph"
    where "pgTrans Y (renameNode f n) (removeNode (renameNode f n) Y)"
      and "X' \<approx> (removeNode (renameNode f n) Y)"
     using assms(4)
@@ -327,7 +332,7 @@ proof -
     oops
 
 lemma pgTrans_pgEquiv:
-    fixes X Y X' :: "('a, 'b, 'c, 'd) port_graph"
+    fixes X Y X' :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "X \<approx> Y"
       and "port_graph X"
       and "pgTrans X n X'"
@@ -412,14 +417,14 @@ proof -
       using fg(6) by fastforce
     then have inv_on_edges_X:
       "e \<in> set (pg_edges X) \<Longrightarrow> renameEdge g (renameEdge f e) = e" for e
-      by (metis (no_types, lifting) edge.expand renameEdge_simps(2) renameEdge_simps(3) X.edge_from_pg X.edge_to_pg)
+      by (metis (no_types, lifting) edge.expand renameEdge_simps(2,3,4) X.edge_from_pg X.edge_to_pg)
 
     have inv_on_places_Y:
       "p \<in> set (pgraphPlaces Y) \<Longrightarrow> renamePlace f (renamePlace g p) = p" for p
       using fg(7) by fastforce
     then have inv_on_edges_Y:
       "e \<in> set (pg_edges Y) \<Longrightarrow> renameEdge f (renameEdge g e) = e" for e
-      by (metis (no_types, lifting) edge.expand renameEdge_simps(2) renameEdge_simps(3) Y.edge_from_pg Y.edge_to_pg)
+      by (metis (no_types, lifting) edge.expand renameEdge_simps(2,3,4) Y.edge_from_pg Y.edge_to_pg)
 
     have rename_ground_place_X: False
       if rename: "renamePlace f pl = GroundPort (QPort p (f (node_name n)))"
@@ -627,14 +632,14 @@ text\<open>
   Based on the transitions we define the usual corecursive bisimulation relation, except we allow
   for renaming of the node labelling the transitions.
 \<close>
-coinductive bisim :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> bool"
+coinductive bisim :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> bool"
   where
     "\<lbrakk>\<And>p' n. pgTrans p n p' \<Longrightarrow> \<exists>q' f. pgTrans q (renameNode f n) q' \<and> bisim p' q';
       \<And>q' n. pgTrans q n q' \<Longrightarrow> \<exists>p' f. pgTrans p (renameNode f n) p' \<and> bisim p' q'\<rbrakk> \<Longrightarrow> bisim p q"
 
 text\<open>In this way, equivalent (well-formed) port graphs are bisimilar\<close>
 lemma bisim_pgEquiv:
-  fixes X Y :: "('s, 'a, 'p, 'l) port_graph"
+  fixes X Y :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "X \<approx> Y"
       and "port_graph X"
     shows "bisim X Y"
@@ -644,11 +649,11 @@ proof -
 
   have stepA: "\<exists>y'. (\<exists>f. pgTrans y (renameNode f n) y') \<and> (x' \<approx> y' \<and> port_graph x' \<and> port_graph y' \<or> bisim x' y')"
     if "x \<approx> y" and "port_graph x" and "port_graph y" and "pgTrans x n x'"
-    for x y x' :: "('s, 'a, 'p, 'l) port_graph" and n
+    for x y x' :: "('s, 'a, 'p, 'nl, 'el) port_graph" and n
     using that pgTrans_pgEquiv by (metis pgTrans.simps port_graph_removeNode)
   have stepB:  "\<exists>x'. (\<exists>f. pgTrans x (renameNode f n) x') \<and> (x' \<approx> y' \<and> port_graph x' \<and> port_graph y' \<or> bisim x' y')"
     if "x \<approx> y" and "port_graph x" and "port_graph y" and "pgTrans y n y'"
-    for x y y' :: "('s, 'a, 'p, 'l) port_graph" and n
+    for x y y' :: "('s, 'a, 'p, 'nl, 'el) port_graph" and n
     using that pgTrans_pgEquiv by (metis pgTrans.simps port_graph_removeNode pgEquiv_sym)
 
   have "X \<approx> Y \<and> port_graph X \<and> port_graph Y"

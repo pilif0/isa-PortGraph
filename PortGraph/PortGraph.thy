@@ -2,6 +2,7 @@ theory PortGraph
   imports
     Port
     PortGraph_Util
+    Map3
 begin
 
 section\<open>Port Graphs\<close>
@@ -48,18 +49,19 @@ lemma un_OpenPort_place_port [simp]:
 fun place_side :: "('s, 'a, 'p) place \<Rightarrow> 's"
   where "place_side p = port.side (place_port p)"
 
-text\<open>Edges are simply pairs of places\<close>
-(* We could consider hyper-edges in the future *)
-datatype ('s, 'a, 'p) edge = Edge (edge_from: "('s, 'a, 'p) place") (edge_to: "('s, 'a, 'p) place")
+text\<open>Edges are pairs of places along with some label\<close>
+datatype ('s, 'a, 'p, 'el) edge =
+  Edge (edge_from: "('s, 'a, 'p) place") (edge_to: "('s, 'a, 'p) place") (edge_label: 'el)
 
 lemma inj_on_Edge [simp]:
-  "inj_on (\<lambda>(x, y). Edge x y) A"
+  "inj_on (\<lambda>(x, y, el). Edge x y el) A"
   using inj_on_def by fastforce
 
 lemma edge_eqE:
   assumes "x = y"
   obtains "edge_from x = edge_from y"
       and "edge_to x = edge_to y"
+      and "edge_label x = edge_label y"
   using assms by simp_all
 
 text\<open>
@@ -68,7 +70,8 @@ text\<open>
   \<^item> Label to carry any relevant content,
   \<^item> Ports attached to the node.
 \<close>
-datatype ('s, 'a, 'p, 'l) node = Node (node_name: "'p list") (node_label: 'l) (node_ports: "('s, 'a) port list")
+datatype ('s, 'a, 'p, 'nl) node =
+  Node (node_name: "'p list") (node_label: 'nl) (node_ports: "('s, 'a) port list")
 
 lemma node_eqE:
   assumes "x = y"
@@ -82,11 +85,11 @@ text\<open>Port graph collects nodes, edges and (top-level) ports in lists\<clos
   Lists are used as representation of finite sets to aid computation and allow mutual recursion in
   the future for hiearchical port graphs.
  *)
-datatype ('s, 'a, 'p, 'l) port_graph =
-  PGraph (pg_nodes: "('s, 'a, 'p, 'l) node list") (pg_edges: "('s, 'a, 'p) edge list") (pg_ports: "('s, 'a) port list")
+datatype ('s, 'a, 'p, 'nl, 'el) port_graph =
+  PGraph (pg_nodes: "('s, 'a, 'p, 'nl) node list") (pg_edges: "('s, 'a, 'p, 'el) edge list") (pg_ports: "('s, 'a) port list")
 
 text\<open>Two port graphs are disjoint when any pair of nodes from them have distinct names\<close>
-definition pg_disjoint :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> bool"
+definition pg_disjoint :: "('s, 'a, 'p, 'nl, 'el1) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el2) port_graph \<Rightarrow> bool"
   where "pg_disjoint x y = (\<forall>m n. m \<in> set (pg_nodes x) \<and> n \<in> set (pg_nodes y) \<longrightarrow> node_name m \<noteq> node_name n)"
 
 lemma pg_disjointI [intro!]:
@@ -123,7 +126,7 @@ lemma pg_disjoint_setD:
 
 lemma sym_pg_disjoint [sym]:
   "pg_disjoint x y \<Longrightarrow> pg_disjoint y x"
-  using pg_disjointD pg_disjointI by metis
+  using pg_disjointD pg_disjointI by fastforce
 
 text\<open>Having a node in two disjoint port graphs is a contradiction\<close>
 lemma pg_disjoint_disjoint [simp]:
@@ -161,7 +164,7 @@ lemma nodePlaces_name [simp]:
   by (fastforce elim: nodePlacesE)
 
 text\<open>Get all places in a port graph: all the nodes' places and the open ports\<close>
-fun pgraphPlaces :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p) place list"
+fun pgraphPlaces :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p) place list"
   where "pgraphPlaces x = concat (map nodePlaces (pg_nodes x)) @ map OpenPort (pg_ports x)"
 
 text\<open>Ground port in a port graph's places must be a place of some node in the graph\<close>
@@ -173,7 +176,7 @@ lemma pgraphPlaces_ground:
 
 text\<open>Place in two disjoint port graphs must be an open port\<close>
 lemma place_in_pg_disjoint:
-  fixes x y :: "('s, 'a, 'p, 'l) port_graph"
+  fixes x y :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "pg_disjoint x y"
       and "p \<in> set (pgraphPlaces x)"
       and "p \<in> set (pgraphPlaces y)"
@@ -207,7 +210,7 @@ proof -
 qed
 
 text\<open>Assuming node names are unique, we can use them to look up nodes\<close>
-fun findNode :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> 'p list \<Rightarrow> ('s, 'a, 'p, 'l) node option"
+fun findNode :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> 'p list \<Rightarrow> ('s, 'a, 'p, 'nl) node option"
   where "findNode G path = someSingleton (filter (\<lambda>n. node_name n = path) (pg_nodes G))"
 
 subsection\<open>Well-Formed Port Graphs\<close>
@@ -216,11 +219,11 @@ text\<open>
   We constrain the general port graph datatype with the following assumptions:
   \<^item> All edges start and end at some place of the port graph
   \<^item> Names of nodes are unique within the port graph
-  \<^item> Labels are not important for distinguishing open ports.
+  \<^item> Labels are not important for distinguishing open ports, node ports or edges.
   \<^item> Node, edge and port lists are distinct (i.e. they nicely represent sets)
 \<close>
 locale port_graph =
-  fixes G :: "('s, 'a, 'p, 'l) port_graph"
+  fixes G :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes edge_from_pg: "\<And>e. e \<in> set (pg_edges G) \<Longrightarrow> edge_from e \<in> set (pgraphPlaces G)"
       and edge_to_pg: "\<And>e. e \<in> set (pg_edges G) \<Longrightarrow> edge_to e \<in> set (pgraphPlaces G)"
       and node_unique_path: "\<And>m n. \<lbrakk>m \<in> set (pg_nodes G); n \<in> set (pg_nodes G); node_name m = node_name n\<rbrakk> \<Longrightarrow> m = n"
@@ -229,6 +232,8 @@ locale port_graph =
             \<Longrightarrow> port.label p = port.label q"
       and node_ports_label_eq: "\<And>n p q. \<lbrakk>n \<in> set (pg_nodes G); p \<in> set (node_ports n); q \<in> set (node_ports n); port.side p = port.side q; port.index p = port.index q\<rbrakk>
             \<Longrightarrow> port.label p = port.label q"
+      and edges_label_eq: "\<And>e f. \<lbrakk>e \<in> set (pg_edges G); f \<in> set (pg_edges G); edge_from e = edge_from f; edge_to e = edge_to f\<rbrakk>
+            \<Longrightarrow> edge_label e = edge_label f"
       and nodes_distinct: "distinct (pg_nodes G)"
       and edges_distinct: "distinct (pg_edges G)"
       and ports_distinct: "distinct (pg_ports G)"
@@ -266,7 +271,7 @@ proof -
 qed
 
 text\<open>Find the node to which a place is attached\<close>
-primrec attachedTo :: "('s, 'a, 'p) place \<Rightarrow> ('s, 'a, 'p, 'l) node option"
+primrec attachedTo :: "('s, 'a, 'p) place \<Rightarrow> ('s, 'a, 'p, 'nl) node option"
   where
     "attachedTo (GroundPort qport) = findNode G (qualified_port.name qport)"
   | "attachedTo (OpenPort port) = None"
@@ -398,12 +403,15 @@ proof standard
   show "\<And>n p q. \<lbrakk>n \<in> set (pg_nodes y); p \<in> set (node_ports n); q \<in> set (node_ports n); port.side p = port.side q;
             port.index p = port.index q\<rbrakk> \<Longrightarrow> port.label p = port.label q"
     using assms port_graph.node_ports_label_eq by blast
+  show "\<And>e f. \<lbrakk>e \<in> set (pg_edges y); f \<in> set (pg_edges y); edge_from e = edge_from f;
+            edge_to e = edge_to f\<rbrakk> \<Longrightarrow> edge_label e = edge_label f"
+    using assms port_graph.edges_label_eq by blast
 qed (rule assms)+
 
 subsection\<open>Port Graphs with Flow\<close>
 
 text\<open>Edge is ``in flow'' if it touches some input or output place\<close>
-definition edge_in_flow :: "('s :: side_in_out, 'a, 'p) edge \<Rightarrow> bool"
+definition edge_in_flow :: "('s :: side_in_out, 'a, 'p, 'el) edge \<Rightarrow> bool"
   where "edge_in_flow e = (place_side (edge_from e) \<in> {In, Out} \<or> place_side (edge_to e) \<in> {In, Out})"
 
 lemma edge_in_flowI:
@@ -431,7 +439,7 @@ text\<open>
 \<close>
 (* TODO Can this flow be loosened in the presence of other sides than just In and Out? *)
 locale port_graph_flow =
-  port_graph G for G :: "('s :: side_in_out, 'a, 'p, 'l) port_graph" +
+  port_graph G for G :: "('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph" +
   assumes edge_from_open:
     "\<lbrakk>e \<in> set (pg_edges G); edge_in_flow e; place_open (edge_from e)\<rbrakk> \<Longrightarrow> place_side (edge_from e) = In"
       and edge_to_open:
@@ -475,7 +483,7 @@ text\<open>
   has flow.
 \<close>
 lemma port_graph_flow_permute:
-  fixes x y :: "('s :: side_in_out, 'a, 'p, 'l) port_graph"
+  fixes x y :: "('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph_flow x"
       and "set (pg_nodes x) = set (pg_nodes y)"
       and "set (pg_edges x) = set (pg_edges y)"
@@ -500,7 +508,7 @@ qed
 subsection\<open>Renaming Port Graphs\<close>
 
 text\<open>Nodes can be renamed with a function on paths\<close>
-definition renameNode :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) node"
+definition renameNode :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl) node"
   where "renameNode f n = Node (f (node_name n)) (node_label n) (node_ports n)"
 
 lemma renameNode_simps [simp]:
@@ -653,13 +661,14 @@ lemma renamePlace_twice [simp]:
   by (cases x; simp)
 
 text\<open>Edges can be renamed with a function on paths\<close>
-definition renameEdge :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p) edge \<Rightarrow> ('s, 'a, 'p) edge"
-  where "renameEdge f e = Edge (renamePlace f (edge_from e)) (renamePlace f (edge_to e))"
+definition renameEdge :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p, 'el) edge \<Rightarrow> ('s, 'a, 'p, 'el) edge"
+  where "renameEdge f e = Edge (renamePlace f (edge_from e)) (renamePlace f (edge_to e)) (edge_label e)"
 
 lemma renameEdge_simps [simp]:
-  "renameEdge f (Edge from to) = Edge (renamePlace f from) (renamePlace f to)"
+  "renameEdge f (Edge from to label) = Edge (renamePlace f from) (renamePlace f to) label"
   "edge_from (renameEdge f e) = renamePlace f (edge_from e)"
   "edge_to (renameEdge f e) = renamePlace f (edge_to e)"
+  "edge_label (renameEdge f e) = edge_label e"
   by (simp_all add: renameEdge_def)
 
 lemma renameEdge_id [simp]:
@@ -672,11 +681,11 @@ lemma renameEdge_in_flow [simp]:
 
 lemma renameEdge_inj_on:
     fixes f :: "'p list \<Rightarrow> 'p list"
-      and A :: "('s, 'a, 'p) edge set"
+      and A :: "('s, 'a, 'p, 'el) edge set"
   assumes "inj_on f (namesOfPlaces (edge_from ` A) \<union> namesOfPlaces (edge_to ` A))"
     shows "inj_on (renameEdge f) A"
 proof
-  fix x y :: "('s, 'a, 'p) edge"
+  fix x y :: "('s, 'a, 'p, 'el) edge"
   assume "renameEdge f x = renameEdge f y"
      and "x \<in> A" and "y \<in> A"
   then show "x = y"
@@ -693,7 +702,7 @@ lemma renameEdge_inv [simp]:
   assumes "bij f"
   shows "renameEdge (inv f) = inv (renameEdge f)"
 proof (intro inv_equality[symmetric])
-  fix x :: "('x, 'y, 'p) edge"
+  fix x :: "('x, 'y, 'p, 'el) edge"
   show "renameEdge (inv f) (renameEdge f x) = x"
     using assms by (simp add: renameEdge_def bij_is_inj renamePlace_inj)
   show "renameEdge f (renameEdge (inv f) x) = x"
@@ -704,7 +713,7 @@ qed
 lemma renameEdge_comp [simp]:
   "renameEdge (g \<circ> f) = renameEdge g \<circ> renameEdge f"
 proof
-  fix x :: "('a, 'b, 'c) edge"
+  fix x :: "('a, 'b, 'c, 'el) edge"
   show "renameEdge (g \<circ> f) x = (renameEdge g \<circ> renameEdge f) x"
     by (cases x) simp_all
 qed
@@ -721,12 +730,12 @@ lemma (in port_graph) inv_on_edges:
   assumes "\<And>p. p \<in> set (pgraphPlaces G) \<Longrightarrow> renamePlace g (renamePlace f p) = p"
       and "e \<in> set (pg_edges G)"
     shows "renameEdge g (renameEdge f e) = e"
-  by (metis (no_types, lifting) assms edge.expand renameEdge_simps(2,3) edge_from_pg edge_to_pg)
+  by (metis (no_types, lifting) assms edge.expand renameEdge_simps(2,3,4) edge_from_pg edge_to_pg)
 
 subsection\<open>Qualifying Port Graphs\<close>
 
 text\<open>Nodes can be qualified with a path element\<close>
-definition qualifyNode :: "'p \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) node"
+definition qualifyNode :: "'p \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl) node"
   where "qualifyNode x n = Node (x # node_name n) (node_label n) (node_ports n)"
 
 lemma qualifyNode_simps [simp]:
@@ -740,7 +749,7 @@ lemma qualifyNode_rename:
   "qualifyNode x = renameNode ((#) x)"
   by standard (simp add: qualifyNode_def renameNode_def)
 
-definition unqualifyNode :: "nat \<Rightarrow> ('s, 'a, 'p, 'l) node \<Rightarrow> ('s, 'a, 'p, 'l) node"
+definition unqualifyNode :: "nat \<Rightarrow> ('s, 'a, 'p, 'nl) node \<Rightarrow> ('s, 'a, 'p, 'nl) node"
   where "unqualifyNode n x = Node (drop n (node_name x)) (node_label x) (node_ports x)"
 
 lemma unqualifyNode_simps [simp]:
@@ -820,6 +829,10 @@ lemma inj_qualifyPlace:
   "inj (qualifyPlace a)"
   by (meson inj_on_inverseI unqualify_qualify_place_inv)
 
+lemma qualifyPlace_eqI:
+  "qualifyPlace a x = qualifyPlace a y \<Longrightarrow> x = y"
+  using unqualify_qualify_place_inv by metis
+
 text\<open>Qualifying an open port does not change it, so it does not change a list of them\<close>
 lemma map_qualify_open_port [simp]:
   "map (qualifyPlace x) (map OpenPort xs) = map OpenPort xs"
@@ -839,13 +852,14 @@ lemma qualifyNode_places:
   by simp
 
 text\<open>Edges can be qualified with a path element\<close>
-definition qualifyEdge :: "'p \<Rightarrow> ('s, 'a, 'p) edge \<Rightarrow> ('s, 'a, 'p) edge"
-  where "qualifyEdge x e = Edge (qualifyPlace x (edge_from e)) (qualifyPlace x (edge_to e))"
+definition qualifyEdge :: "'p \<Rightarrow> ('s, 'a, 'p, 'el) edge \<Rightarrow> ('s, 'a, 'p, 'el) edge"
+  where "qualifyEdge x e = Edge (qualifyPlace x (edge_from e)) (qualifyPlace x (edge_to e)) (edge_label e)"
 
 lemma qualifyEdge_simps [simp]:
-  "qualifyEdge x (Edge from to) = Edge (qualifyPlace x from) (qualifyPlace x to)"
+  "qualifyEdge x (Edge from to label) = Edge (qualifyPlace x from) (qualifyPlace x to) label"
   "edge_from (qualifyEdge a e) = qualifyPlace a (edge_from e)"
   "edge_to (qualifyEdge a e) = qualifyPlace a (edge_to e)"
+  "edge_label (qualifyEdge a e) = edge_label e"
   by (simp_all add: qualifyEdge_def)
 
 lemma qualifyEdge_rename:
@@ -856,13 +870,14 @@ lemma qualifyEdge_in_flow [simp]:
   "edge_in_flow (qualifyEdge x e) = edge_in_flow e"
   by (simp add: edge_in_flow_def)
 
-definition unqualifyEdge :: "nat \<Rightarrow> ('s, 'a, 'p) edge \<Rightarrow> ('s, 'a, 'p) edge"
-  where "unqualifyEdge n e = Edge (unqualifyPlace n (edge_from e)) (unqualifyPlace n (edge_to e))"
+definition unqualifyEdge :: "nat \<Rightarrow> ('s, 'a, 'p, 'el) edge \<Rightarrow> ('s, 'a, 'p, 'el) edge"
+  where "unqualifyEdge n e = Edge (unqualifyPlace n (edge_from e)) (unqualifyPlace n (edge_to e)) (edge_label e)"
 
 lemma unqualifyEdge_simps [simp]:
-  "unqualifyEdge n (Edge from to) = Edge (unqualifyPlace n from) (unqualifyPlace n to)"
+  "unqualifyEdge n (Edge from to label) = Edge (unqualifyPlace n from) (unqualifyPlace n to) label"
   "edge_from (unqualifyEdge a e) = unqualifyPlace a (edge_from e)"
   "edge_to (unqualifyEdge a e) = unqualifyPlace a (edge_to e)"
+  "edge_label (unqualifyEdge a e) = edge_label e"
   by (simp_all add: unqualifyEdge_def)
 
 lemma unqualifyEdge_rename:
@@ -880,11 +895,20 @@ lemma inj_qualifyEdge:
 text\<open>Qualifying edges just after constructing them can be merged with the construction\<close>
 lemma qualify_map2_edge [simp]:
   assumes "length xs = length ys"
-  shows "map (qualifyEdge p) (map2 Edge xs ys) = map2 Edge (map (qualifyPlace p) xs) (map (qualifyPlace p) ys)"
-  using assms by (simp add: split_def zip_map_map)
+  shows "map (qualifyEdge p) (map3 Edge xs ys zs) = map3 Edge (map (qualifyPlace p) xs) (map (qualifyPlace p) ys) zs"
+proof -
+  have "map (qualifyEdge p) (map3 Edge xs ys zs) = map3 (\<lambda>x y. Edge (qualifyPlace p x) (qualifyPlace p y)) xs ys zs"
+    by (simp add: map_map3)
+  also have "... = map (\<lambda>(x, y, z). Edge x y z) (map3 (\<lambda>x y z. (qualifyPlace p x, qualifyPlace p y, z)) xs ys zs)"
+    by (simp add: map_map3)
+  also have "... = map3 Edge (map (qualifyPlace p) xs) (map (qualifyPlace p) ys) zs"
+    by (subst zip_map3(1)[where h = "\<lambda>x. x", simplified, symmetric])
+       (simp add: map3_def)
+  finally show ?thesis .
+qed
 
 text\<open>Port graphs can be qualified with a path element\<close>
-definition qualifyPortGraph :: "'p \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph"
+definition qualifyPortGraph :: "'p \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph"
   where "qualifyPortGraph x g = PGraph (map (qualifyNode x) (pg_nodes g)) (map (qualifyEdge x) (pg_edges g)) (pg_ports g)"
 
 lemma qualifyPortGraph_simps [simp]:
@@ -894,7 +918,7 @@ lemma qualifyPortGraph_simps [simp]:
   "pg_ports (qualifyPortGraph a x) = pg_ports x"
   by (simp_all add: qualifyPortGraph_def)
 
-definition unqualifyPortGraph :: "nat \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph"
+definition unqualifyPortGraph :: "nat \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph"
   where "unqualifyPortGraph n g = PGraph (map (unqualifyNode n) (pg_nodes g)) (map (unqualifyEdge n) (pg_edges g)) (pg_ports g)"
 
 lemma unqualifyPortGraph_simps [simp]:
@@ -918,7 +942,7 @@ lemma pgraphPlaces_qualifyPortGraph [simp]:
 
 text\<open>Qualifying a well-formed port graph keeps it well-formed\<close>
 lemma port_graph_qualifyPortGraph:
-  fixes x :: "('s, 'a, 'b, 'c) port_graph"
+  fixes x :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph x"
     shows "port_graph (qualifyPortGraph a x)"
 proof -
@@ -935,7 +959,7 @@ proof -
     show "edge_to e \<in> set (pgraphPlaces (qualifyPortGraph a x))"
       using e x.edge_to_pg by fastforce
   next
-    fix m n :: "('s, 'a, 'b, 'c) node"
+    fix m n :: "('s, 'a, 'p, 'nl) node"
     assume "m \<in> set (pg_nodes (qualifyPortGraph a x))"
        and "n \<in> set (pg_nodes (qualifyPortGraph a x))"
        and "node_name m = node_name n"
@@ -964,6 +988,14 @@ proof -
     then show "port.label p = port.label q"
       by clarsimp (blast intro: x.node_ports_label_eq)
   next
+    fix e f
+    assume "e \<in> set (pg_edges (qualifyPortGraph a x))"
+       and "f \<in> set (pg_edges (qualifyPortGraph a x))"
+       and "edge_from e = edge_from f"
+       and "edge_to e = edge_to f"
+    then show "edge_label e = edge_label f"
+      by clarsimp (blast intro: x.edges_label_eq qualifyPlace_eqI)
+  next
     show "distinct (pg_nodes (qualifyPortGraph a x))"
       using x.nodes_distinct inj_qualifyNode
       by (fastforce intro: inj_on_subset simp add: distinct_map)
@@ -979,7 +1011,7 @@ qed
 
 text\<open>Furthermore, qualifying a well-formed port graph with flow also keeps its flow\<close>
 lemma port_graph_flow_qualifyPortGraph:
-  fixes x :: "('s :: side_in_out, 'a, 'b, 'c) port_graph"
+  fixes x :: "('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph_flow x"
     shows "port_graph_flow (qualifyPortGraph a x)"
 proof (cases x)
@@ -1038,7 +1070,7 @@ subsection\<open>Port Graph Surgeries\<close>
 subsubsection\<open>Disconnecting Edges from Places\<close>
 
 text\<open>Remove from a list of edges those that connect (from either side) to one of given places\<close>
-definition disconnectFromPlaces :: "('s, 'a, 'p) place list \<Rightarrow> ('s, 'a, 'p) edge list \<Rightarrow> ('s, 'a, 'p) edge list"
+definition disconnectFromPlaces :: "('s, 'a, 'p) place list \<Rightarrow> ('s, 'a, 'p, 'el) edge list \<Rightarrow> ('s, 'a, 'p, 'el) edge list"
   where "disconnectFromPlaces places edges = filter (\<lambda>e. edge_from e \<notin> set places \<and> edge_to e \<notin> set places) edges"
 
 text\<open>Disconnecting from appended list is disconnecting from each sublist in sequence\<close>
@@ -1064,36 +1096,41 @@ lemma disconnectFromPlaces_commute:
 text\<open>Disconnecting from places used in creation of edges yields the empty list\<close>
 lemma disconnectFromPlaces_map2_edge_those:
   assumes "length xs = length ys"
-    shows "disconnectFromPlaces xs (map2 Edge xs ys) = []" (is ?th1)
-      and "disconnectFromPlaces ys (map2 Edge xs ys) = []" (is ?th2)
+      and "length ys = length zs"
+    shows "disconnectFromPlaces xs (map3 Edge xs ys zs) = []" (is ?th1)
+      and "disconnectFromPlaces ys (map3 Edge xs ys zs) = []" (is ?th2)
 proof -
   show ?th1
     using assms
-  proof (induct xs arbitrary: ys)
+  proof (induct xs arbitrary: ys zs)
     case Nil
     then show ?case by (simp add: disconnectFromPlaces_def)
   next
     case (Cons a as)
     then obtain b bs where ys: "ys = b # bs"
       by (metis Suc_length_conv)
-    then have "disconnectFromPlaces as (map2 Edge as bs) = []"
+    moreover obtain c cs where zs: "zs = c # cs"
+      using Cons by (metis Suc_length_conv)
+    ultimately have "disconnectFromPlaces as (map3 Edge as bs cs) = []"
       using Cons by fastforce
     then show ?case
-      by (fastforce simp add: ys disconnectFromPlaces_def filter_empty_conv)
+      by (fastforce simp add: ys zs disconnectFromPlaces_def filter_empty_conv)
   qed
   show ?th2
     using assms
-  proof (induct xs arbitrary: ys)
+  proof (induct xs arbitrary: ys zs)
     case Nil
     then show ?case by (simp add: disconnectFromPlaces_def)
   next
     case (Cons a as)
     then obtain b bs where ys: "ys = b # bs"
       by (metis Suc_length_conv)
-    then have "disconnectFromPlaces bs (map2 Edge as bs) = []"
-      using Cons by fastforce
+    moreover obtain c cs where zs: "zs = c # cs"
+      using Cons by (metis Suc_length_conv)
+    then have "disconnectFromPlaces bs (map3 Edge as bs cs) = []"
+      using Cons ys by fastforce
     then show ?case
-      by (fastforce simp add: ys disconnectFromPlaces_def filter_empty_conv)
+      by (fastforce simp add: ys zs disconnectFromPlaces_def filter_empty_conv)
   qed
 qed
 
@@ -1113,9 +1150,10 @@ lemma disconnectFromPlaces_neither:
   assumes "\<And>x. x \<in> set as \<Longrightarrow> x \<notin> set xs"
       and "\<And>x. x \<in> set bs \<Longrightarrow> x \<notin> set xs"
       and "length as = length bs"
-    shows "disconnectFromPlaces xs (map2 Edge as bs) = map2 Edge as bs"
+      and "length bs = length cs"
+    shows "disconnectFromPlaces xs (map3 Edge as bs cs) = map3 Edge as bs cs"
   using assms
-  by (simp add: disconnectFromPlaces_def filter_map comp_def)
+  by (simp add: disconnectFromPlaces_def filter_map comp_def map3_def)
      (smt (verit, best) case_prod_unfold edge.sel(1) edge.sel(2) edge.split_sel filter_True in_set_zip le_boolD nth_mem order.refl)
 
 text\<open>Renaming disconnected edges is the same as disconnecting renamed original edges from analogously renamed places.\<close>
@@ -1178,7 +1216,7 @@ qed
 subsubsection\<open>Selecting Outgoing Edges\<close>
 
 text\<open>Predicate that is true only for edges going to open output ports\<close>
-definition toOpenOut :: "('s :: side_in_out, 'a, 'p) edge \<Rightarrow> bool"
+definition toOpenOut :: "('s :: side_in_out, 'a, 'p, 'el) edge \<Rightarrow> bool"
   where "toOpenOut e = (place_open (edge_to e) \<and> place_side (edge_to e) = Out)"
 
 lemma toOpenOutE [elim!]:
@@ -1195,22 +1233,26 @@ lemma toOpenOutI [intro!]:
 text\<open>Filtering open output edges after constructing them to go to open output ports keeps all of them\<close>
 lemma filter_toOpenOut_map2Edge_outs:
   assumes "length xs = length ys"
-    shows " filter toOpenOut (map2 Edge xs (map OpenPort (listPorts n Out ys))) =
-            map2 Edge xs (map OpenPort (listPorts n Out ys))"
+      and "length ys = length zs"
+    shows " filter toOpenOut (map3 Edge xs (map OpenPort (listPorts n Out ys)) zs) =
+            map3 Edge xs (map OpenPort (listPorts n Out ys)) zs"
 proof -
-  have "filter toOpenOut (map2 Edge xs ps) = map2 Edge xs ps"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = Out" and "length xs = length ps"
+  have "filter toOpenOut (map3 Edge xs ps zs) = map3 Edge xs ps zs"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = Out"
+    and "length xs = length ps" and "length ps = length zs"
     for ps
     using that
-  proof (induct xs arbitrary: ps)
+  proof (induct xs arbitrary: ps zs)
     case Nil
     then show ?case by simp
   next
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_open b" and "port.side (place_port b) = Out"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: toOpenOut_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (simp add: toOpenOut_def map3_def)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1219,21 +1261,25 @@ qed
 text\<open>Filtering open output edges after constructing them to go to open input ports keeps none of them\<close>
 lemma filter_toOpenOut_map2Edge_ins:
   assumes "length xs = length ys"
-    shows "filter toOpenOut (map2 Edge xs (map OpenPort (listPorts n In ys))) = []"
+      and "length ys = length zs"
+    shows "filter toOpenOut (map3 Edge xs (map OpenPort (listPorts n In ys)) zs) = []"
 proof -
-  have "filter toOpenOut (map2 Edge xs ps) = []"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = In" and "length xs = length ps"
+  have "filter toOpenOut (map3 Edge xs ps zs) = []"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = In"
+    and "length xs = length ps" and "length ps = length zs"
     for ps
     using that
-  proof (induct xs arbitrary: ps)
+  proof (induct xs arbitrary: ps zs)
     case Nil
     then show ?case by simp
   next
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_open b" and "port.side (place_port b) = In"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: toOpenOut_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (simp add: toOpenOut_def map3_def)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1242,21 +1288,24 @@ qed
 text\<open>Filtering open output edges after constructing them to go to ground ports keeps none of them\<close>
 lemma filter_toOpenOut_map2Edge_ground:
   assumes "length xs = length ys"
-    shows "filter toOpenOut (map2 Edge xs (map (\<lambda>p. GroundPort (f p)) ys)) = []"
+      and "length ys = length zs"
+    shows "filter toOpenOut (map3 Edge xs (map (\<lambda>p. GroundPort (f p)) ys) zs) = []"
 proof -
-  have "filter toOpenOut (map2 Edge xs ps) = []"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_ground p" and "length xs = length ps"
+  have "filter toOpenOut (map3 Edge xs ps zs) = []"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_ground p" and "length xs = length ps" and "length ps = length zs"
     for ps
     using that
-  proof (induct xs arbitrary: ps)
+  proof (induct xs arbitrary: ps zs)
     case Nil
     then show ?case by simp
   next
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_ground b"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: toOpenOut_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (simp add: toOpenOut_def map3_def)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1334,7 +1383,7 @@ qed
 subsubsection\<open>Selecting Incoming Edges\<close>
 
 text\<open>Predicate that is true only for edges going from open input ports\<close>
-definition fromOpenIn :: "('s :: side_in_out, 'a, 'p) edge \<Rightarrow> bool"
+definition fromOpenIn :: "('s :: side_in_out, 'a, 'p, 'el) edge \<Rightarrow> bool"
   where "fromOpenIn e = (place_open (edge_from e) \<and> place_side (edge_from e) = In)"
 
 lemma fromOpenInE [elim!]:
@@ -1351,11 +1400,13 @@ lemma fromOpenInI [intro!]:
 text\<open>Filtering open input edges after constructing them to go from open input ports keeps all of them\<close>
 lemma filter_fromOpenIn_map2Edge_ins:
   assumes "length xs = length ys"
-    shows " filter fromOpenIn (map2 Edge (map OpenPort (listPorts n In xs)) ys) =
-            map2 Edge (map OpenPort (listPorts n In xs)) ys"
+      and "length ys = length zs"
+    shows " filter fromOpenIn (map3 Edge (map OpenPort (listPorts n In xs)) ys zs) =
+            map3 Edge (map OpenPort (listPorts n In xs)) ys zs"
 proof -
-  have "filter fromOpenIn (map2 Edge ps ys) = map2 Edge ps ys"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = In" and "length ys = length ps"
+  have "filter fromOpenIn (map3 Edge ps ys zs) = map3 Edge ps ys zs"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = In"
+    and "length ys = length ps" and "length ps = length zs"
     for ps
     using that
   proof (induct ys arbitrary: ps)
@@ -1365,8 +1416,10 @@ proof -
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_open b" and "port.side (place_port b) = In"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: fromOpenIn_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (fastforce simp add: fromOpenIn_def elim!: in_set_zipE intro!: filter_True)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1375,10 +1428,12 @@ qed
 text\<open>Filtering open input edges after constructing them to go from open output ports keeps none of them\<close>
 lemma filter_fromOpenIn_map2Edge_outs:
   assumes "length xs = length ys"
-    shows "filter fromOpenIn (map2 Edge (map OpenPort (listPorts n Out xs)) ys) = []"
+      and "length ys = length zs"
+    shows "filter fromOpenIn (map3 Edge (map OpenPort (listPorts n Out xs)) ys zs) = []"
 proof -
-  have "filter fromOpenIn (map2 Edge ps ys) = []"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = Out" and "length ys = length ps"
+  have "filter fromOpenIn (map3 Edge ps ys zs) = []"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_open p \<and> port.side (place_port p) = Out"
+    and "length ys = length ps" and "length ps = length zs"
     for ps
     using that
   proof (induct ys arbitrary: ps)
@@ -1388,8 +1443,10 @@ proof -
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_open b" and "port.side (place_port b) = Out"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: fromOpenIn_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (fastforce simp add: fromOpenIn_def elim!: in_set_zipE intro!: filter_False)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1398,10 +1455,11 @@ qed
 text\<open>Filtering open input edges after constructing them to go from ground ports keeps none of them\<close>
 lemma filter_fromOpenIn_map2Edge_ground:
   assumes "length xs = length ys"
-    shows "filter fromOpenIn (map2 Edge (map (\<lambda>p. GroundPort (f p)) xs) ys) = []"
+      and "length ys = length zs"
+    shows "filter fromOpenIn (map3 Edge (map (\<lambda>p. GroundPort (f p)) xs) ys zs) = []"
 proof -
-  have "filter fromOpenIn (map2 Edge ps ys) = []"
-    if "\<And>p. p \<in> set ps \<Longrightarrow> place_ground p" and "length ys = length ps"
+  have "filter fromOpenIn (map3 Edge ps ys zs) = []"
+    if "\<And>p. p \<in> set ps \<Longrightarrow> place_ground p" and "length ys = length ps" and "length ps = length zs"
     for ps
     using that
   proof (induct ys arbitrary: ps)
@@ -1411,8 +1469,10 @@ proof -
     case (Cons a as)
     then obtain b bs where "ps = b # bs" and "place_ground b"
       by (metis length_0_conv list.exhaust list.set_intros(1))
-    then show ?case
-      using Cons by (simp add: fromOpenIn_def)
+    moreover obtain c cs where "zs = c # cs"
+      using Cons by (metis length_Suc_conv)
+    ultimately show ?case
+      using Cons by (fastforce simp add: fromOpenIn_def elim!: in_set_zipE intro!: filter_False)
   qed
   then show ?thesis
     by (rule ; fastforce simp add: assms)
@@ -1624,8 +1684,8 @@ lemma qualifyPlace_shiftOpenPlace [simp]:
   by (simp add: qualifyPlace_rename)
 
 text\<open>We can apply open place shift on both ends of an edge, by amounts that may depend on the place's side\<close>
-definition shiftOpenInEdge :: "('s \<Rightarrow> nat) \<Rightarrow> ('s \<Rightarrow> nat) \<Rightarrow> ('s, 'a, 'p) edge \<Rightarrow> ('s, 'a, 'p) edge"
-  where "shiftOpenInEdge m n e = Edge (shiftOpenPlace m (edge_from e)) (shiftOpenPlace n (edge_to e))"
+definition shiftOpenInEdge :: "('s \<Rightarrow> nat) \<Rightarrow> ('s \<Rightarrow> nat) \<Rightarrow> ('s, 'a, 'p, 'el) edge \<Rightarrow> ('s, 'a, 'p, 'el) edge"
+  where "shiftOpenInEdge m n e = Edge (shiftOpenPlace m (edge_from e)) (shiftOpenPlace n (edge_to e)) (edge_label e)"
 
 lemma shiftOpenInEdge_0_0 [simp]:
   "shiftOpenInEdge (\<lambda>s. 0) (\<lambda>s. 0) = (\<lambda>x. x)"
@@ -1634,6 +1694,7 @@ lemma shiftOpenInEdge_0_0 [simp]:
 lemma shiftOpenInEdge_simps [simp]:
   "edge_from (shiftOpenInEdge m n e) = shiftOpenPlace m (edge_from e)"
   "edge_to (shiftOpenInEdge m n e) = shiftOpenPlace n (edge_to e)"
+  "edge_label (shiftOpenInEdge m n e) = edge_label e"
   by (simp_all add: shiftOpenInEdge_def)
 
 lemma shiftOpenInEdge_known:
@@ -1650,10 +1711,20 @@ text\<open>
   Shifting a list of edges just after constructing them can be decomposed into shifting the open
   places from which they are being constructed
 \<close>
-lemma map_shiftOpenInEdge_map2:
-  " map (shiftOpenInEdge m n) (map2 Edge xs ys) =
-    map2 Edge (map (shiftOpenPlace m) xs) (map (shiftOpenPlace n) ys)"
-  by (clarsimp simp add: comp_def map2_map_each shiftOpenInEdge_def)
+lemma map_shiftOpenInEdge_map3:
+  " map (shiftOpenInEdge m n) (map3 Edge xs ys zs) =
+    map3 Edge (map (shiftOpenPlace m) xs) (map (shiftOpenPlace n) ys) zs"
+proof -
+  have
+    " map (shiftOpenInEdge m n) (map3 Edge xs ys zs)
+    = map3 (\<lambda>x y z. shiftOpenInEdge m n (Edge x y z)) xs ys zs"
+    by (simp add: map_map3)
+  also have "... = map3 (\<lambda>x y z. Edge (shiftOpenPlace m x) (shiftOpenPlace n y) z) xs ys zs"
+    by (simp add: shiftOpenInEdge_def)
+  also have "... = map3 Edge (map (shiftOpenPlace m) xs) (map (shiftOpenPlace n) ys) zs"
+    by (subst map3_map_each[where c = "\<lambda>x. x", simplified]) (rule refl)
+  finally show ?thesis .
+qed
 
 text\<open>Shifting an edge twice shifts it by the added amount\<close>
 lemma shiftOpenInEdge_twice [simp]:
@@ -1733,7 +1804,7 @@ text\<open>
 \<close>
 (* Predicate for witnessing functions is split out to help reuse steps in proofs *)
 (* TODO better document it *)
-definition pgEquiv_witness :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> bool"
+definition pgEquiv_witness :: "('p list \<Rightarrow> 'p list) \<Rightarrow> ('p list \<Rightarrow> 'p list) \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> bool"
   where "pgEquiv_witness f g x y \<equiv>
     renameNode f ` (set (pg_nodes x)) = set (pg_nodes y) \<and>
     set (pg_nodes x) = renameNode g ` (set (pg_nodes y)) \<and>
@@ -1822,7 +1893,7 @@ proof -
   qed
 qed
 
-definition pgEquiv :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> bool" (infix "\<approx>" 50)
+definition pgEquiv :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> bool" (infix "\<approx>" 50)
   where "pgEquiv x y = ((\<not> port_graph x \<and> \<not> port_graph y) \<or>
   ( port_graph x \<and>
     port_graph y \<and>

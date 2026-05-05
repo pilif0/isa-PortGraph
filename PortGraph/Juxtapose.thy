@@ -4,7 +4,7 @@ begin
 
 section\<open>Port Graph Juxtaposition\<close>
 
-fun juxtapose :: "('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph \<Rightarrow> ('s, 'a, 'p, 'l) port_graph"
+fun juxtapose :: "('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph \<Rightarrow> ('s, 'a, 'p, 'nl, 'el) port_graph"
   where "juxtapose P Q = PGraph
     (pg_nodes P @ pg_nodes Q)
     ( pg_edges P @
@@ -56,9 +56,104 @@ lemma pg_disjoint_juxtapose [simp]:
   "pg_disjoint z (juxtapose x y) = (pg_disjoint z x \<and> pg_disjoint z y)"
   by (fastforce simp add: pg_disjoint_def)+
 
+text\<open>
+  Let there be two distinct port graphs and one edge in each, with one of those edges having open
+  ports shifted the indices on that side in the other port graph.
+  It is impossible for those edges to share an origin or destination.
+  If their origin or destination is an open port then they cannot agree on the port's index.
+  If their origin or destination is a ground port then they cannot agree on the name of the node it
+  is attached to.
+\<close>
+lemma disjoint_shifted_not_share_edges:
+  assumes x: "port_graph x"
+      and y: "port_graph y"
+      and disj: "pg_disjoint x y"
+      and e: "e \<in> set (pg_edges x)"
+      and f: "f \<in> shiftOpenInEdge m n ` set (pg_edges y)"
+      and m: "\<And>p. p \<in> set (pg_ports x) \<Longrightarrow> port.index p < m (port.side p)"
+      and n: "\<And>p. p \<in> set (pg_ports x) \<Longrightarrow> port.index p < n (port.side p)"
+      and share: "edge_from e = edge_from f \<or> edge_to e = edge_to f"
+    shows False
+  using share
+proof
+  assume fr: "edge_from e = edge_from f"
+  then show ?thesis
+  proof (cases "edge_from e")
+    case (GroundPort qp)
+
+    obtain a where "a \<in> set (pg_nodes x)" and "qualified_port.name qp = node_name a"
+      using GroundPort e x port_graph.edge_from_pg
+      by (metis nodePlaces_name pgraphPlaces_ground place.discI(1) place_name.simps)
+    moreover obtain b where "b \<in> set (pg_nodes y)" and "qualified_port.name qp = node_name b"
+    proof -
+      obtain f' where f: "f = shiftOpenInEdge m n f'" and f': "f' \<in> set (pg_edges y)"
+        using f by blast
+      moreover have "edge_from f' = edge_from f"
+        using GroundPort fr f
+        by (metis place.disc(1) shiftOpenInEdge_simps(1) shiftOpenPlace_ground(1,2))
+      ultimately obtain b where "b \<in> set (pg_nodes y)" and "qualified_port.name qp = node_name b"
+        using GroundPort fr y port_graph.edge_from_pg
+        by (metis nodePlaces_name pgraphPlaces_ground place.discI(1) place_name.simps)
+      then show ?thesis
+        using that by metis
+    qed
+    ultimately show ?thesis
+      by (metis disj pg_disjointD)
+  next
+    case (OpenPort p)
+
+    have "m (port.side p) \<le> port.index p"
+      using OpenPort fr f shiftOpenInEdge_from_index_bound by fastforce
+    moreover have "p \<in> set (pg_ports x)"
+      using OpenPort e x port_graph.open_port_pg port_graph.edge_from_pg
+      by (metis place.disc(4) place_port.simps(2))
+    then have "port.index p < m (port.side p)"
+      by (rule m)
+    ultimately show ?thesis
+      by simp
+  qed
+next
+  assume to: "edge_to e = edge_to f"
+  then show ?thesis
+  proof (cases "edge_to e")
+    case (GroundPort qp)
+
+    obtain a where "a \<in> set (pg_nodes x)" and "qualified_port.name qp = node_name a"
+      using GroundPort e x port_graph.edge_to_pg
+      by (metis nodePlaces_name pgraphPlaces_ground place.discI(1) place_name.simps)
+    moreover obtain b where "b \<in> set (pg_nodes y)" and "qualified_port.name qp = node_name b"
+    proof -
+      obtain f' where f: "f = shiftOpenInEdge m n f'" and f': "f' \<in> set (pg_edges y)"
+        using f by blast
+      moreover have "edge_to f' = edge_to f"
+        using GroundPort to f
+        by (metis place.disc(1) shiftOpenInEdge_simps(2) shiftOpenPlace_ground(1,2))
+      ultimately obtain b where "b \<in> set (pg_nodes y)" and "qualified_port.name qp = node_name b"
+        using GroundPort to y port_graph.edge_to_pg
+        by (metis nodePlaces_name pgraphPlaces_ground place.discI(1) place_name.simps)
+      then show ?thesis
+        using that by metis
+    qed
+    ultimately show ?thesis
+      by (metis disj pg_disjointD)
+  next
+    case (OpenPort p)
+
+    have "n (port.side p) \<le> port.index p"
+      using OpenPort to f shiftOpenInEdge_to_index_bound by fastforce
+    moreover have "p \<in> set (pg_ports x)"
+      using OpenPort e x port_graph.open_port_pg port_graph.edge_to_pg
+      by (metis place.disc(4) place_port.simps(2))
+    then have "port.index p < n (port.side p)"
+      by (rule n)
+    ultimately show ?thesis
+      by simp
+  qed
+qed
+
 text\<open>Juxtaposition of well-formed port graphs is well-formed\<close>
 lemma port_graph_juxtapose:
-    fixes x y :: "('s, 'a, 'p, 'l) port_graph"
+    fixes x y :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph x"
       and "port_graph y"
       and "pg_disjoint x y"
@@ -202,6 +297,68 @@ proof -
     then show "port.label p = port.label q"
       by (metis in_nodes_juxtaposeE x.node_ports_label_eq y.node_ports_label_eq)
   next
+    fix e f
+    assume e: "e \<in> set (pg_edges (juxtapose x y))"
+       and f: "f \<in> set (pg_edges (juxtapose x y))"
+       and fr: "edge_from e = edge_from f"
+       and to: "edge_to e = edge_to f"
+
+    consider
+        (XX) "e \<in> set (pg_edges x)"
+         and "f \<in> set (pg_edges x)"
+      | (XY) "e \<in> set (pg_edges x)"
+         and "f \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+      | (YX) "e \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+         and "f \<in> set (pg_edges x)"
+      | (YY) "e \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+         and "f \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+      using e f fr by simp blast
+    then consider
+        (XX) "e \<in> set (pg_edges x)"
+         and "f \<in> set (pg_edges x)"
+      | (YY) "e \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+         and "f \<in> shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) ` set (pg_edges y)"
+    proof cases
+      case XX
+      then show ?thesis by (rule that(1))
+    next
+      case XY
+      then show ?thesis
+        using disjoint_shifted_not_share_edges[OF assms] fr
+        by (metis (no_types, lifting) ext x.ports_index_bound)
+    next
+      case YX
+      then show ?thesis
+        using disjoint_shifted_not_share_edges[OF assms] fr
+        by (metis (no_types, lifting) ext x.ports_index_bound)
+    next
+      case YY
+      then show ?thesis by (rule that(2))
+    qed
+    then show "edge_label e = edge_label f"
+    proof cases
+      case XX
+      then show ?thesis
+        using fr to x.edges_label_eq by blast
+    next
+      case YY
+
+      obtain e'
+       where "e' \<in> set (pg_edges y)"
+         and e: "e = shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) e'"
+        using YY(1) by blast
+      moreover obtain f'
+       where "f' \<in> set (pg_edges y)"
+         and f: "f = shiftOpenInEdge (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) (\<lambda>s. length (filter (\<lambda>x. port.side x = s) (pg_ports x))) f'"
+        using YY(2) by blast
+      moreover have "edge_from e' = edge_from f'"
+        using fr e f inj_shiftOpenPlace by (fastforce simp add: inj_def)
+      moreover have "edge_to e' = edge_to f'"
+        using to e f inj_shiftOpenPlace by (fastforce simp add: inj_def)
+      ultimately show ?thesis
+        by (fastforce intro: y.edges_label_eq)
+    qed
+  next
     show "distinct (pg_nodes (juxtapose x y))"
       using assms x.nodes_distinct y.nodes_distinct by fastforce
 
@@ -267,7 +424,7 @@ qed
 
 text\<open>Juxtaposition of port graphs preserves their flow\<close>
 lemma port_graph_flow_juxtapose:
-    fixes x y :: "('s :: side_in_out, 'a, 'p, 'l) port_graph"
+    fixes x y :: "('s :: side_in_out, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph_flow x"
       and "port_graph_flow y"
       and "pg_disjoint x y"
@@ -318,7 +475,7 @@ text\<open>
   all port graphs with flow and none of their node names clash.
 \<close>
 lemma juxtapose_assoc_pgEquiv:
-  fixes x y z :: "('s, 'a, 'p, 'l) port_graph"
+  fixes x y z :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph x"
       and "port_graph y"
       and "port_graph z"
@@ -528,7 +685,7 @@ proof (rule pgEquivI_ex)
 qed
 
 lemma juxtapose_assoc:
-  fixes x y z :: "('s, 'a, 'p, 'l) port_graph"
+  fixes x y z :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph x"
       and "port_graph y"
       and "port_graph z"
@@ -552,7 +709,7 @@ subsection\<open>Respecting Equivalence\<close>
 
 text\<open>Juxtaposition respects port graph equivalence\<close>
 lemma juxtapose_resp:
-  fixes x y x' y' :: "('s, 'a, 'p, 'l) port_graph"
+  fixes x y x' y' :: "('s, 'a, 'p, 'nl, 'el) port_graph"
   assumes "port_graph x"
       and "port_graph y"
       and "pg_disjoint x y"
